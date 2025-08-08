@@ -1,3 +1,4 @@
+from datetime import datetime
 import pandas as pd
 import numpy as np
 import json
@@ -45,10 +46,10 @@ class EstablishDataframe:
         
     def data_margin(self, dataframe):
         date_ranges = [
-                ("2021-01-04", "2025-07-25"),
-                ("2022-01-03", "2025-07-25"),
-                ("2023-01-02", "2025-07-25"),
-                ("2024-01-02", "2025-07-25"),
+                ("2021-01-04", datetime.strftime(datetime.now(), "%Y-%m-%d")),
+                ("2022-01-03", datetime.strftime(datetime.now(), "%Y-%m-%d")),
+                ("2023-01-02", datetime.strftime(datetime.now(), "%Y-%m-%d")),
+                ("2024-01-02", datetime.strftime(datetime.now(), "%Y-%m-%d")),
             ]
         for start_date, end_date in date_ranges:
 
@@ -98,7 +99,7 @@ class Data():
             self.data_path = r"data"
 
         self.queue = Queue(5)
-
+        self.dates_queue = Queue(5)
         # self.file_queue = Queue(5)
         # self.dates_queue = Queue(5)
 
@@ -307,9 +308,9 @@ class Data():
         ):
             return True
 
-# data = Data("all")
+# data = Data("small")
 
-# # data.pattern_search(data.new_high)
+# data.pattern_search(data.new_high)
 # # data.pattern_search(data.new_low)
 # dates, data = data.data_search(data.check_roc, -10)
 # print(len(dates), len(data))

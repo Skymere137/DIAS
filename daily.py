@@ -13,13 +13,12 @@ api = AsyncApiCaller()
 def get_dataframes():
     global small_cap_data
     small_cap_data = Data("small")
-def print_statement():
-    print("Hello World!!!")
+
 
 small_cap_data = Data("small")
 
 schedule.every().day.at("05:00").do(lambda: api.get_watchlist_data)
-schedule.every().day.at("05:30").do(lambda: print_statement)
+schedule.every().day.at("21:45").do(lambda: get_dataframes())
 
 async def run_scheduler():
     while True:
@@ -45,6 +44,11 @@ app = FastAPI(lifespan=lifespan)
 @app.get("/")
 async def root():
     return {"message": "Hello, FastAPI!"}
+
+@app.get("/newHigh_smallCap")
+async def new_highs_json():
+    new_highs = small_cap_data.find_new_highs()
+    return new_highs
 
 @app.get("/new_lows")
 async def new_lows_json():
