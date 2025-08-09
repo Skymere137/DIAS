@@ -25,13 +25,30 @@ def get_dataframes():
     global mid_cap_data
     mid_cap_data = Data("mid")
 
-schedule.every().day.at("05:00").do(lambda: api.get_watchlist_data(api.small_cap_tickers))
-schedule.every().day.at("05:15").do(lambda: api.get_watchlist_data(api.mid_cap_tickers))
-schedule.every().day.at("05:30").do(lambda: get_dataframes())
-schedule.every().day.at("06:00").do(lambda: get_dataframes())
+def async_scheduler(task):
+    asyncio.create_task(task)
 
+def schedulers():
+    try:
+        schedule.every().day.at("05:00").do(lambda: async_scheduler(api.get_watchlist_data(api.small_cap_tickers)))
+    except Exception as e:
+        print(e)
+    try:
+        schedule.every().day.at("05:15").do(lambda: async_scheduler(api.get_watchlist_data(api.mid_cap_tickers)))
+    except Exception as e:
+        print(e)
+    try:
+        schedule.every().day.at("05:30").do(lambda: get_dataframes())
+    except Exception as e:
+        print(e)
+    try:
+        schedule.every().day.at("06:00").do(lambda: get_dataframes())
+    except Exception as e:
+        print(e)
 async def run_scheduler():
+
     while True:
+        schedulers()
         schedule.run_pending()
         await asyncio.sleep(1)
 
