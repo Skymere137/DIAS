@@ -1,6 +1,5 @@
 from datetime import datetime
 import schedule
-from flask import Flask, jsonify
 from candlesticks import Data
 import json
 from data import AsyncApiCaller
@@ -12,9 +11,9 @@ api = AsyncApiCaller()
 
 # async def main():
     
-#     print("Hello World!")
-#     await api.get_watchlist_data(api.small_cap_tickers)
-#     await api.get_watchlist_data(api.mid_cap_tickers)
+#     # print("Hello World!")
+#     # await api.get_watchlist_data(api.small_cap_tickers)
+#     # await api.get_watchlist_data(api.mid_cap_tickers)
 #     get_dataframes()
 
 #     print("Goodbye World!")
@@ -41,14 +40,10 @@ def schedulers():
         schedule.every().day.at("05:30").do(lambda: get_dataframes())
     except Exception as e:
         print(e)
-    try:
-        schedule.every().day.at("06:00").do(lambda: get_dataframes())
-    except Exception as e:
-        print(e)
+    
 async def run_scheduler():
-
+    schedulers()
     while True:
-        schedulers()
         schedule.run_pending()
         await asyncio.sleep(1)
 
@@ -74,13 +69,22 @@ app = FastAPI(lifespan=lifespan)
 async def root():
     return {"message": "Hello, FastAPI!"}
 
-@app.get("/newHigh_smallCap")
+@app.get("/s_new_highs")
 async def new_highs_json():
     new_highs = small_cap_data.find_new_highs()
-    return new_highs
+    return small_cap_data.json_safe(new_highs)
 
-@app.get("/new_lows")
+@app.get("/s_new_lows")
 async def new_lows_json():
     new_lows = small_cap_data.find_new_lows()
-    return new_lows
+    return small_cap_data.json_safe(new_lows)
 
+@app.get("/m_new_highs")
+async def new_highs_json():
+    new_highs = mid_cap_data.find_new_highs()
+    return mid_cap_data.json_safe(new_highs)
+
+@app.get("/m_new_lows")
+async def new_lows_json():
+    new_lows = mid_cap_data.find_new_lows()
+    return mid_cap_data.json_safe(new_lows)

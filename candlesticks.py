@@ -1,3 +1,4 @@
+import math
 from datetime import datetime
 import pandas as pd
 import numpy as np
@@ -277,7 +278,17 @@ class Data():
         return dates
 
 # Pattern Functions
-    
+    def json_safe(self, obj):
+        if isinstance(obj, dict):
+            return {k: self.json_safe(v) for k, v in obj.items()}
+        elif isinstance(obj, list):
+            return [self.json_safe(v) for v in obj]
+        elif isinstance(obj, float):
+            if math.isnan(obj) or math.isinf(obj):
+                return None  # or a default value
+        return obj
+
+
     def new_low(self):
         if len(self.queue.values) < 5:
             return False
