@@ -130,9 +130,9 @@ class Data():
                 current_close = df.iloc[-1]["close"]
                 current_high = df.iloc[-1]["high"]
                 prev_close = df.iloc[-2]["close"]
-                prev_high = df.iloc[-2]["close"]
+                prev_high = df.iloc[-2]["high"]
                 if current_high > prev_high and current_close < prev_close:
-                    tickers.append({name: df.iloc[1].to_dict()})
+                    tickers.append({name: df.iloc[-1].to_dict()})
             
         return tickers
 
@@ -150,7 +150,7 @@ class Data():
                 prev_close = df.iloc[-2]["close"]
                 prev_low = df.iloc[-2]["low"]
                 if current_close > prev_close and current_low < prev_low:
-                    tickers.append({name: df.iloc[1].to_dict()})
+                    tickers.append({name: df.iloc[-1].to_dict()})
 
         return tickers
 
@@ -285,7 +285,7 @@ class Data():
             return [self.json_safe(v) for v in obj]
         elif isinstance(obj, float):
             if math.isnan(obj) or math.isinf(obj):
-                return None  # or a default value
+                return None
         return obj
 
 
@@ -310,12 +310,12 @@ class Data():
         
         current_high = self.queue.values[4]["high"]
         new_high = self.queue.max_value("high")
-        prev_close = self.queue.values[3]["close"]
+        prev_low = self.queue.values[3]["low"]
         close = self.queue.values[4]["close"]
 
         if (
             current_high == new_high and
-            close < prev_close
+            close < prev_low
         ):
             return True
 
