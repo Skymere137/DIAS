@@ -118,21 +118,22 @@ class Data():
             "get_avg": self.get_avg
         }
         self.dataframes = self.multiprocess_dataframes(self.data_path)
-
+    
     def find_new_highs(self):
         tickers = []
         for name, df in self.dataframes.items():
             if len(df) < 6:
                 continue
-            selected_rows = df["high"].iloc[-5:-1]
+            selected_rows = df["high"].iloc[-6:-1]
             last_row = df["high"].iloc[-1]
+            prev_highs = max(df.iloc[-6:-1]["high"])
             if last_row >= max(selected_rows):
                 current_close = df.iloc[-1]["close"]
                 current_high = df.iloc[-1]["high"]
-                prev_close = df.iloc[-2]["close"]
-                prev_high = df.iloc[-2]["high"]
-                if current_high > prev_high and current_close < prev_close:
-                    tickers.append({name: df.iloc[-1].to_dict()})
+                prev_low = df.iloc[-2]["low"]
+                if current_high >= prev_highs:
+                    if current_close < prev_low:
+                        tickers.append({name: df.iloc[-1].to_dict()})
             
         return tickers
 
@@ -142,15 +143,17 @@ class Data():
         for name, df in self.dataframes.items():
             if len(df) < 6:
                 continue
-            selected_rows = df["low"].iloc[-5:-1]
+            selected_rows = df["low"].iloc[-6:-1]
             last_row = df["low"].iloc[-1]
+            prev_lows = min(df.iloc[-6:-1]["lows"])
             if last_row <= min(selected_rows):
                 current_close = df.iloc[-1]["close"]
                 current_low = df.iloc[-1]["low"]
                 prev_close = df.iloc[-2]["close"]
                 prev_low = df.iloc[-2]["low"]
-                if current_close > prev_close and current_low < prev_low:
-                    tickers.append({name: df.iloc[-1].to_dict()})
+                if current_low >= prev_lows:
+                    if current_close < prev_close:
+                        tickers.append({name: df.iloc[-1].to_dict()})
 
         return tickers
 
@@ -299,7 +302,7 @@ class Data():
         close = self.queue.values[4]["close"]
 
         if (
-            current_low == new_low and
+            current_low <= new_low and
             close > prev_high
         ):
             return True
@@ -314,7 +317,7 @@ class Data():
         close = self.queue.values[4]["close"]
 
         if (
-            current_high == new_high and
+            current_high >= new_high and
             close < prev_low
         ):
             return True
