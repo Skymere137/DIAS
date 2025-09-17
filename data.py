@@ -44,11 +44,18 @@ class AsyncApiCaller():
         with open(r"tickers/midTickers.json", "r") as file:
             data = json.load(file)
             self.mid_cap_tickers = [item for item in data] 
+        # with open(r"tickers/largeTickers.json", "r") as file:
+        #     data = json.load(file)
+        #     self.large_cap_tickers = [item for item in data] 
         with open(r"tickers/AllCapTickers.json", "r") as file:
             data = json.load(file)
             self.all_cap_tickers = [item for item in data]
+        self.data_acquiration_arr = [
+            self.get_one_hour,
+            self.get_five_min,
+            self.get_one_min
+        ]
         
-
     async def fetch_json(self, session, url, retries=3):
         tickers = []
         for attempt in range(retries):
@@ -75,27 +82,28 @@ class AsyncApiCaller():
                 await asyncio.sleep(2)  # wait before retrying
         print(f"Failed after {retries} retries: {url}")
         return None
-    
-    async def get_symbol(self, symbol, session):
+
+    async def get_daily_data(self, symbol, trgt_dir, session):
         url = f"https://eodhd.com/api/eod/{symbol}.US?api_token={self.token}&fmt=json"
-        print(f"Getting data for ticker: {symbol}")
+        async with aiohttp.ClientSession() as session:
+            try:
+                data = await self.fetch_json(session, url)
+            except aiohttp.ClientResponseError as e:
+                print(f"HTTP error: {e}")
+                data = None
+            except aiohttp.ClientError as e:
+                print(f"Request error: {e}")
+                data = None
+            except Exception as e:
+                print(f"Unexpected error: {e}")
+                data = None
         
-        try:
-            data = await self.fetch_json(session, url)
-        except aiohttp.ClientResponseError as e:
-            print(f"HTTP error: {e}")
-            data = None
-        except aiohttp.ClientError as e:
-            print(f"Request error: {e}")
-            data = None
-        except Exception as e:
-            print(f"Unexpected error: {e}")
-            data = None
-
+        with open(f"{trgt_dir}/{symbol}.json", "w") as file:
+            json.dump(data, file)
         return data
-
+    
 # Intraday Data
-    async def get_one_hour(self, symbol, _from=None, to=None):
+    async def get_one_hour(self, symbol, trgt_dir, _from=None, to=None):
         if isinstance(_from, datetime):
             _from = int(_from.timestamp())
         if isinstance(to, datetime):
@@ -104,7 +112,7 @@ class AsyncApiCaller():
             to == _from + (86400 * 5)
         
         if _from:
-            url = f"https://eodhd.com/api/intraday/{symbol}?interval=1h&api_token={self.token}&fmt=json&from={_from}&to={to}"
+            url = f"https://eodhd.com/api/intraday/{symbol}.US?interval=1h&api_token={self.token}&fmt=json&from={_from}&to={to}"
 
         async with aiohttp.ClientSession() as session:
             try:
@@ -119,11 +127,16 @@ class AsyncApiCaller():
                 print(f"Unexpected error: {e}")
                 data = None
         
-        with open(f"Trading/one_hour_data/{symbol}.json", "w") as file:
+        with open(f"one_hour_{trgt_dir}/{symbol}.json", "w") as file:
             json.dump(data, file)
         return data
     
-    async def get_five_min(self, symbol, _from=None, to=None):
+    async def get_five_min(self, symbol, trgt_dir, _from=None, to=None):
+        if isinstance(_from, str):
+            _from = datetime.strptime(_from, "%Y-%m-%d")
+        if isinstance(to, str):
+            to = datetime.strptime(to, "%Y-%m-%d")
+            
         if isinstance(_from, datetime):
             _from = int(_from.timestamp())
         if isinstance(to, datetime):
@@ -132,7 +145,7 @@ class AsyncApiCaller():
             to == _from + (86400 * 5)
         
         if _from:
-            url = f"https://eodhd.com/api/intraday/{symbol}?interval=5m&api_token={self.token}&fmt=json&from={_from}&to={to}"
+            url = f"https://eodhd.com/api/intraday/{symbol}.US?interval=5m&api_token={self.token}&fmt=json&from={_from}&to={to}"
 
         async with aiohttp.ClientSession() as session:
             try:
@@ -147,20 +160,19 @@ class AsyncApiCaller():
                 print(f"Unexpected error: {e}")
                 data = None
                 
-        with open(f"Trading/five_min_data/{symbol}.json", "w") as file:
+        with open(f"five_min_{trgt_dir}/{symbol}.json", "w") as file:
             json.dump(data, file)
         return data
     
-    async def get_one_min(self, symbol, _from, to=None):
+    async def get_one_min(self, symbol, trgt_dir, _from, to=None):
         if isinstance(_from, datetime):
             _from = int(_from.timestamp())
         if isinstance(to, datetime):
             to = int(to.timestamp())
         if to is None:
             to == _from + (86400 * 5)
-        
         if _from:
-            url = f"https://eodhd.com/api/intraday/{symbol}?interval=1m&api_token={self.token}&fmt=json&from={_from}&to={to}"
+            url = f"https://eodhd.com/api/intraday/{symbol}.US?interval=1m&api_token={self.token}&fmt=json&from={_from}&to={to}"
         async with aiohttp.ClientSession() as session:
             try:
                 data = await self.fetch_json(session, url)
@@ -174,58 +186,43 @@ class AsyncApiCaller():
                 print(f"Unexpected error: {e}")
                 data = None
         
-        with open(f"Trading/one_min_data/{symbol}.json", "w") as file:
+        with open(f"one_min_{trgt_dir}/{symbol}.json", "w") as file:
             json.dump(data, file)
         return data
+    
+    async def get_one_day(self, tf, trgt_dir, symbol):
+        today = int(datetime.now().timestamp())
+        yesterday = int(datetime.now().timestamp()) - 86400
+        return tf(symbol, trgt_dir, yesterday, today)
 
-    async def get_all_intraday(self, cap, tf="1h"):
-        if tf == "1h":
-            if cap == "small":
-                for ticker in self.small_cap_tickers:
-                    data = await self.get_one_hour(ticker)
-            if cap == "mid":
-                for ticker in self.mid_cap_tickers:
-                    data = await self.get_one_hour(ticker)
-            if cap == "large":
-                for ticker in self.large_cap_tickers:
-                    data = await self.get_one_hour(ticker)
-            if cap == "all":
-                for ticker in self.all_cap_tickers:
-                    data = await self.get_one_hour(ticker)
-        if tf == "5m":
-            if cap == "small":
-                for ticker in self.small_cap_tickers:
-                    data = await self.get_five_min(ticker)
-            if cap == "mid":
-                for ticker in self.mid_cap_tickers:
-                    data = await self.get_five_min(ticker)
-            if cap == "large":
-                for ticker in self.large_cap_tickers:
-                    data = await self.get_five_min(ticker)
-            if cap == "all":
-                for ticker in self.all_cap_tickers:
-                    data = await self.get_five_min(ticker)
-        if tf == "1m":
-            if cap == "small":
-                for ticker in self.small_cap_tickers:
-                    data = await self.get_one_min(ticker)
-            if cap == "mid":
-                for ticker in self.mid_cap_tickers:
-                    data = await self.get_one_min(ticker)
-            if cap == "large":
-                for ticker in self.large_cap_tickers:
-                    data = await self.get_one_min(ticker)
-            if cap == "all":
-                for ticker in self.all_cap_tickers:
-                    data = await self.get_one_min(ticker)
-                    
+    async def get_one_week(self, tf, trgt_dir, symbol):
+        today = int(datetime.now().timestamp())
+        one_week_ago = int(datetime.now().timestamp()) - (86400 * 7)
+        return await tf(symbol, trgt_dir, one_week_ago, today)
+    
+    async def get_one_month(self, tf, symbol):
+        today = int(datetime.now().timestamp())
+        one_month_ago = int(datetime.now().timestamp()) - (86400 * 30)
+        return await tf(symbol, one_month_ago, today)
+    
+    async def get_one_year(self, tf, trgt_dir, symbol):
+        today = int(datetime.now().timestamp())
+        one_year_ago = int(datetime.now().timestamp()) - (86400 * 365)
+        return await tf(symbol, trgt_dir, one_year_ago, today)
+    
+    async def more_than_one_year(self, tf, trgt_dir, symbol, year_num=1):
+        today = int(datetime.now().timestamp())
+        num_of_years = year_num * 365
+        years_ago = int(datetime.now().timestamp()) - (86400 * year_num)
+        return await tf(symbol, trgt_dir, years_ago, today)
+    
     async def get_watchlist_data(self, watchlist):
         print(watchlist)
         tasks = []
         if isinstance(watchlist, dict):
             async with aiohttp.ClientSession() as session:
                 tasks = [
-                    self.get_symbol(value["ticker"], session)
+                    self.get_daily_data(value["ticker"], session)
                     for key, value in watchlist.items()
                 ]
                 results = await asyncio.gather(*tasks)
@@ -243,7 +240,7 @@ class AsyncApiCaller():
                 print(watchlist)
 
             async with aiohttp.ClientSession() as session:
-                tasks = [self.get_symbol(ticker, session) for ticker in watchlist]
+                tasks = [self.get_daily_data(ticker, session) for ticker in watchlist]
                 results = await asyncio.gather(*tasks)
                 print(file)
                 for ticker, data in zip(watchlist, results):
@@ -255,9 +252,9 @@ class AsyncApiCaller():
         else:
             raise TypeError("Incorrect data type passed into get_watchlist_data")
 
-    async def get_symbol_data(self, ticker, file="Trading/data"):
+    async def get_daily_data_data(self, ticker, file="data"):
         try:
-            data = await self.get_symbol(ticker)
+            data = await self.get_daily_data(ticker)
             os.makedirs(f"{os.path.dirname(os.path.abspath(__file__))}/{file}", exist_ok=True)
             if not data:
                     return
@@ -267,20 +264,20 @@ class AsyncApiCaller():
         except Exception as e:
             print(f"Error with ticker {ticker}! Error: {e}")
     
-    async def get_watchlist(self, session, url):
-        
-        data = await self.fetch_json(session, url)
-
-        watchlist = {
-            item["name"]: {
-                "ticker": item["code"],
-                "mkt_cap": item["market_capitalization"],
-                "current_price": item["adjusted_close"],
-                "volume": item["avgvol_200d"],
-                "date": item["last_day_data_date"],
+    async def get_watchlist(self, url):
+        async with aiohttp.ClientSession() as session:
+            data = await self.fetch_json(session, url)
+            print(data)
+            watchlist = {
+                item["name"]: {
+                    "ticker": item["code"],
+                    "mkt_cap": item["market_capitalization"],
+                    "current_price": item["adjusted_close"],
+                    "volume": item["avgvol_200d"],
+                    "date": item["last_day_data_date"],
+                }
+                for item in data["data"]
             }
-            for item in data["data"]
-        }
         return watchlist
 
 
@@ -288,7 +285,7 @@ class AsyncApiCaller():
 
     async def data_collection(self, symbol=None, url=None):
         if isinstance(symbol, str):
-            return await self.get_symbol(symbol)
+            return await self.get_daily_data(symbol)
             
         async with aiohttp.ClientSession() as session:
             if isinstance(url, str):
@@ -298,21 +295,14 @@ class AsyncApiCaller():
 
                 data = await self.get_watchlist_data(session, watchlist)
 
-    async def csv_file_reader(mkt_cap):
+    async def csv_file_reader(self, mkt_cap):
         tickers = []  
-        with open(f'Trading/tickers/{mkt_cap}Tickers.csv', newline='') as csvfile:
+        with open(f'tickers/{mkt_cap}Tickers.csv', newline='') as csvfile:
             reader = csv.DictReader(csvfile)
             for row in reader:
                 print(row)
                 tickers.append(row['Symbol'])
 
 
-        with open(f'Trading/tickers/{mkt_cap}Tickers.json', 'w') as jsonfile:
+        with open(f'tickers/{mkt_cap}Tickers.json', 'w') as jsonfile:
             json.dump(tickers, jsonfile, indent=4)
-
-# api = AsyncApiCaller()
-
-# if __name__ == "__main__":
-#     asyncio.run(api.get_watchlist_data(api.all_cap_tickers))
-
-
