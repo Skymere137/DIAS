@@ -3,12 +3,13 @@ from datetime import datetime
 import pandas as pd
 import numpy as np
 import json
+import operator
 import os
 from custom_queue import Queue
 import multiprocessing
 
 class EstablishDataframe:
-    def __init__(self, data, window=9, rvol_window=20):
+    def __init__(self, data, nine_day_window=9, large_day_window=40, rvol_window=20):
         self.data = data
         self.data = pd.read_json(self.data)
         self.data = pd.DataFrame(self.data)
@@ -17,20 +18,25 @@ class EstablishDataframe:
             self.data["date"] = pd.to_datetime(self.data["date"])
             self.data.set_index(["date"], inplace=True)
         except KeyError:
-            print("❌ 'date' column not found in data. Skipping datetime conversion and indexing.")
-
-        self.queue = Queue(5)
+            self.data["timestamp"] = pd.to_datetime(self.data["timestamp"])
+            self.data.set_index(["timestamp"], inplace=True)
+        except KeyError:
+            print("❌ 'date', 'timeframe', 'datetime' columns not found in data. Skipping datetime conversion and indexing.")
+            
+        self.queue = Queue(6)
         self.data = self.data_margin(self.data)
-        self.window_size = pd.Timedelta(days=window)
+        self.window_size = pd.Timedelta(days=nine_day_window)
+        self.large_window = pd.Timedelta(days=large_day_window)
         self.rvol_window = pd.Timedelta(days=rvol_window)
 
         for index in self.data.index:
-            window_start = index - self.window_size
-            window_data = self.data.loc[window_start:index, "close"]
-            self.data.at[index, "mvAvg"] = window_data.mean()
-            self.data["EMA"] = self.data["close"].ewm(span=window, adjust=False).mean()
+            self.data["mvAvg9"] = self.data["close"].rolling(window=nine_day_window).mean()
+            self.data["mvAvg40"] = self.data["close"].rolling(window=large_day_window).mean()
+
+            self.data["EMA"] = self.data["close"].ewm(span=nine_day_window, adjust=False).mean()
+            self.data["EMA36"] = self.data["close"].ewm(span=large_day_window, adjust=False).mean()
             if self.queue.values:
-                self.data.at[index, "RoC"] = self.calculate_roc(self.data.loc[index, "mvAvg"], self.queue.values[-1]["mvAvg"])
+                self.data.at[index, "RoC"] = self.calculate_roc(self.data.loc[index, "mvAvg9"], self.queue.values[-1]["mvAvg9"])
             else:
                 self.data.at[index, "RoC"] = 0
 
@@ -42,9 +48,8 @@ class EstablishDataframe:
                 self.data.at[index, "x_day_high"] = self.queue.max_value("high", 4)
             self.data.at[index, "pattern"] = None
             self.queue.enqueue(self.data.loc[index])
+        self.final_days = self.data.iloc[-20:-1]
 
-        
-        
     def data_margin(self, dataframe):
         date_ranges = [
                 ("2021-01-04", datetime.strftime(datetime.now(), "%Y-%m-%d")),
@@ -62,17 +67,24 @@ class EstablishDataframe:
         print("❌ No valid date range found. Returning original dataframe.")
         return dataframe
             
-        
-    def bull_or_bear(self, _open, _close):
-        try:
-            if _open < _close:
-                return True
-            if _close < _open:
-                return False
-            
-        except TypeError as e:
-            print(e)
-            return None
+    def filter(self, params):
+        if not isinstance(params, list):
+            raise TypeError("Non list type found in parameter")  
+        ops = {
+            "==": operator.eq,
+            "!=": operator.ne,
+            ">": operator.gt,
+            "<": operator.lt,
+            ">=": operator.ge,
+            "<=": operator.le
+        }
+        if params[1] not in ops:
+            raise ValueError("Incorrect operand type in method parameters")
+        else:
+            func = ops[params[1]]
+            if func(params[0], params[2]):
+                return params[0]
+        return None
 
     def calculate_roc(self, current_value, prev_value):
         
@@ -81,34 +93,125 @@ class EstablishDataframe:
     def calculate_rvol(self, current_vol, avg_vol):
         return current_vol/avg_vol
 
+class IntradayDataframe:
+    def __init__(self, data, nine_day_window=9, large_day_window=40, rvol_window=20):
+        self.data = data
+        self.data = pd.read_json(self.data)
+        self.data = pd.DataFrame(self.data)
+        try:
+            self.data["datetime"] = pd.to_datetime(self.data["datetime"])
+            self.data.set_index(["datetime"], inplace=True)
+        except KeyError:
+            try:
+                self.data["timestamp"] = pd.to_datetime(self.data["timestamp"])
+                self.data.set_index(["timestamp"], inplace=True)
+            except KeyError:
+                print("❌ 'date' column not found in data. Skipping datetime conversion and indexing.")
+                
+
+        self.queue = Queue(6)
+        self.data = self.data_margin(self.data)
+        self.window_size = pd.Timedelta(days=nine_day_window)
+        self.large_window = pd.Timedelta(days=large_day_window)
+        self.rvol_window = pd.Timedelta(days=rvol_window)
+
+        for index in self.data.index:
+            self.data["mvAvg9"] = self.data["close"].rolling(window=nine_day_window).mean()
+            self.data["mvAvg40"] = self.data["close"].rolling(window=large_day_window).mean()
+
+            self.data["EMA"] = self.data["close"].ewm(span=nine_day_window, adjust=False).mean()
+            self.data["EMA36"] = self.data["close"].ewm(span=large_day_window, adjust=False).mean()
+            if self.queue.values:
+                self.data.at[index, "RoC"] = self.calculate_roc(self.data.loc[index, "mvAvg9"], self.queue.values[-1]["mvAvg9"])
+            else:
+                self.data.at[index, "RoC"] = 0
+
+            rvol_start = index - self.rvol_window
+            rvol_data = self.data.loc[rvol_start:index, "volume"]
+            avg_vol = rvol_data.mean()
+            self.data.at[index, "rVol"] = self.calculate_rvol(self.data.loc[index, "volume"], avg_vol)
+            if self.queue.values:
+                self.data.at[index, "x_day_high"] = self.queue.max_value("high", 4)
+            self.data.at[index, "pattern"] = None
+            self.queue.enqueue(self.data.loc[index])
+        self.final_days = self.data.iloc[-20:-1]
+
+    def data_margin(self, dataframe):
+        date_ranges = [
+                ("2021-01-04", datetime.strftime(datetime.now(), "%Y-%m-%d")),
+                ("2022-01-03", datetime.strftime(datetime.now(), "%Y-%m-%d")),
+                ("2023-01-02", datetime.strftime(datetime.now(), "%Y-%m-%d")),
+                ("2024-01-02", datetime.strftime(datetime.now(), "%Y-%m-%d")),
+            ]
+        for start_date, end_date in date_ranges:
+
+            try:
+                return dataframe.loc[start_date:end_date]
+            except KeyError as e:
+                print(f"KeyError: {e}. Trying next date range...")
+
+        print("❌ No valid date range found. Returning original dataframe.")
+        return dataframe
+            
+    def filter(self, params):
+        if not isinstance(params, list):
+            raise TypeError("Non list type found in parameter")    
+        ops = {
+            "==": operator.eq,
+            "!=": operator.ne,
+            ">": operator.gt,
+            "<": operator.lt,
+            ">=": operator.ge,
+            "<=": operator.le
+        }
+        if params[1] not in ops:
+            raise ValueError("Incorrect operand type in method parameters")
+        else:
+            func = ops[params[1]]
+            if func(params[0], params[2]):
+                return params[0]
+        return None
+
+    def calculate_roc(self, current_value, prev_value):
+        
+        return ((current_value - prev_value) / prev_value) * 100
+
+    def calculate_rvol(self, current_vol, avg_vol):
+        return current_vol/avg_vol
+     
 class Data():
-    def __init__(self, cap):
+    def __init__(self, cap, tf="daily"):
         print(cap)
-        if cap == "testing":
-            self.data_path = r"testing_data"
+        if tf != "daily":
+            self.intraday = True
+        else: 
+            self.intraday = False
 
-        if cap == "all":
-            self.data_path = r"all_cap_data"
+        capitalizations = {
+            "large": "l",
+            "mid": "m",
+            "small": "s"
+        }
+        tfs = {
+            "daily": "daily",
+            "1hr": "one_hour",
+            "5min": "five_min",
+            "1min": "one_min"
+        }
+        try:
+            for key, value in capitalizations.items():
+                if key == cap:
+                    cap_size = value
 
-        if cap == "small":
-            self.data_path = r"small_cap_data"
-       
-        if cap =="mid":
-            self.data_path = r"mid_cap_data"
-
-        if cap == "data":
-            self.data_path = r"data"
-
-        self.queue = Queue(5)
-        self.dates_queue = Queue(5)
-        # self.file_queue = Queue(5)
-        # self.dates_queue = Queue(5)
-
-        # for n in sorted(os.listdir("stats")):
-        #     self.file_queue.enqueue(n)
-
-        # for n in sorted(os.listdir("dates")):
-        #     self.file_queue.enqueue(n)
+            for key, value in tfs.items():
+                if tf == key:
+                    tf = value
+        except:
+            return print("Market Cap or Tf value not found in dict!")
+        self.data_path = f"{tf}_{cap_size}"
+        
+        print(self.data_path)
+        self.queue = Queue(6)
 
         self.commands = {
             "check_roc": self.check_roc,
@@ -119,11 +222,64 @@ class Data():
         }
         self.dataframes = self.multiprocess_dataframes(self.data_path)
     
+    def multiprocess_dataframes(self, file):
+        print("Creating Dataframes!!!")
+        manager = multiprocessing.Manager()
+        return_dict = manager.dict()
+        processes = []
+        my_lists = self.splitup(os.listdir(file), 8)
+        
+        for idx, tickers in enumerate(my_lists):
+            tickers = multiprocessing.Process(
+                target=self.create_all_dataframes, 
+                args=[tickers, self.data_path, return_dict, idx])
+            tickers.start()
+            processes.append(tickers)
+
+        for process in processes:
+            process.join()
+        print(f"Dataframes established")
+        final_result = {}
+        for dict in return_dict.values():
+            final_result.update(dict)
+        return final_result
+    
+    def create_all_dataframes(self, tickers, base_path, return_dict, idx):
+        if self.intraday is True:
+            frame = IntradayDataframe
+        else:
+            frame = EstablishDataframe
+        result = {}
+        for ticker in tickers:
+            full_path = os.path.join(base_path, ticker)
+            df = frame(full_path)
+            result[ticker[:-5]] = df.data
+        return_dict[idx] = result
+
+    def find_green_crossovers(self):
+        tickers = []
+        for name, df in self.dataframes.items():
+            if len(df) < 36:
+                continue
+            small_averages = df.iloc[-12:-1]
+            large_averages = df.iloc[-12:-1]
+            
+            if small_averages["mvAvg9"][-5] < large_averages["mvAvg40"][-5]:
+                if small_averages["mvAvg9"][-4] > small_averages["mvAvg9"][-5] and large_averages["mvAvg40"][-4] < large_averages["mvAvg40"][-5]:
+                    if small_averages["mvAvg9"][-3] > small_averages["mvAvg9"][-4] and large_averages["mvAvg40"][-3] < large_averages["mvAvg40"][-4]:
+                        if small_averages["mvAvg9"][-2] > small_averages["mvAvg9"][-3] and large_averages["mvAvg40"][-2] < large_averages["mvAvg40"][-3]:
+                            if small_averages["mvAvg9"][-1] > small_averages["mvAvg9"][-2] and large_averages["mvAvg40"][-1] < large_averages["mvAvg40"][-2]:
+                                tickers.append({name: df.iloc[-1].to_dict()})
+                                print(name)
+                                print(small_averages["mvAvg9"][-5], large_averages["mvAvg40"][-5])
+        return tickers
+    
     def find_new_highs(self):
         tickers = []
         for name, df in self.dataframes.items():
             if len(df) < 6:
                 continue
+            print(df)
             selected_rows = df["high"].iloc[-6:-1]
             last_row = df["high"].iloc[-1]
             prev_highs = max(df.iloc[-6:-1]["high"])
@@ -149,48 +305,16 @@ class Data():
             if last_row <= min(selected_rows):
                 current_close = df.iloc[-1]["close"]
                 current_low = df.iloc[-1]["low"]
-                prev_close = df.iloc[-2]["close"]
-                prev_low = df.iloc[-2]["low"]
+                prev_high = df.iloc[-2]["high"]
                 if current_low >= prev_lows:
-                    if current_close < prev_close:
+                    if current_close > prev_high:
                         tickers.append({name: df.iloc[-1].to_dict()})
 
         return tickers
 
-
     def splitup(self, lst, n):
         k, m = divmod(len(lst), n)
         return [lst[i * k + min(i, m):(i + 1) * k + min(i + 1, m)] for i in range(n)]
-
-    def multiprocess_dataframes(self, file):
-        print("Creating Dataframes!!!")
-        manager = multiprocessing.Manager()
-        return_dict = manager.dict()
-        processes = []
-        my_lists = self.splitup(os.listdir(file), 8)
-        
-        for idx, tickers in enumerate(my_lists):
-            tickers = multiprocessing.Process(
-                target=self.create_all_dataframes, 
-                args=[tickers, self.data_path, return_dict, idx])
-            tickers.start()
-            processes.append(tickers)
-
-        for process in processes:
-            process.join()
-        print(f"Dataframes established")
-        final_result = {}
-        for dict in return_dict.values():
-            final_result.update(dict)
-        return final_result
-    
-    def create_all_dataframes(self, tickers, base_path, return_dict, idx):
-        result = {}
-        for ticker in tickers:
-            full_path = os.path.join(base_path, ticker)
-            df = EstablishDataframe(full_path)
-            result[ticker[:-5]] = df.data
-        return_dict[idx] = result
 
 # Fibonacci Retracement
     def fibonacci(self, zero, one):
@@ -201,8 +325,8 @@ class Data():
         diff = high - low
         nums = [low + (num * diff) for num in fibonacci_levels]
         return nums
+    
 # Number Search
-
     def data_search(self, condition, param=None):
         data = []
         dates = []
@@ -223,7 +347,6 @@ class Data():
         return dates, data
 
 # Value Search Functions
-
     def check_roc(self, row, num):
         if isinstance(num, str):
             num = int(num)
@@ -256,10 +379,6 @@ class Data():
             return self.read_stats()
                 
 # Pattern Search
-
-    # Pattern search function tasks
-    # iterate through dataframe and check queue for a pattern
-    
     def pattern_search(self, pattern):
         instances = 0
         dates = {}
@@ -277,7 +396,7 @@ class Data():
         date_file = self.dates_queue.dequeue()
         self.queue.enqueue(date_file)
         print(instances)
-        self.write_dates(date_file, dates)
+        
         return dates
 
 # Pattern Functions
@@ -291,15 +410,24 @@ class Data():
                 return None
         return obj
 
-
+    def uptrend_below_avg(self):
+        if self.queue.values["mvAvg9"].iloc[0] >= self.queue.values["mvAvg40"].iloc[0]:
+            return False
+    
+        for i in range(1, 6):
+            print(self.queue.values["mvAvg9"].iloc[i], self.queue.values["mvAvg9"].iloc[i-1])
+            if self.queue.values["mvAvg9"].iloc[i] <= self.queue.values["mvAvg9"].iloc[i-1]:
+                return False 
+        
+    
     def new_low(self):
-        if len(self.queue.values) < 5:
+        if len(self.queue.values) < 6:
             return False
         
-        current_low = self.queue.values[4]["low"]
+        current_low = self.queue.values[5]["low"]
         new_low = self.queue.min_value("low")
-        prev_high = self.queue.values[3]["high"]
-        close = self.queue.values[4]["close"]
+        prev_high = self.queue.values[4]["high"]
+        close = self.queue.values[5]["close"]
 
         if (
             current_low <= new_low and
@@ -308,13 +436,13 @@ class Data():
             return True
         
     def new_high(self):
-        if len(self.queue.values) < 5:
+        if len(self.queue.values) < 6:
             return False
         
-        current_high = self.queue.values[4]["high"]
+        current_high = self.queue.values[5]["high"]
         new_high = self.queue.max_value("high")
-        prev_low = self.queue.values[3]["low"]
-        close = self.queue.values[4]["close"]
+        prev_low = self.queue.values[4]["low"]
+        close = self.queue.values[5]["close"]
 
         if (
             current_high >= new_high and
@@ -322,10 +450,4 @@ class Data():
         ):
             return True
 
-# data = Data("small")
-
-# data.pattern_search(data.new_high)
-# # data.pattern_search(data.new_low)
-# dates, data = data.data_search(data.check_roc, -10)
-# print(len(dates), len(data))
 
