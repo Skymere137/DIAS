@@ -67,7 +67,7 @@ async def run_scheduler():
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     print("Starting app and scheduler...")
-    # await main()
+    await main()
 
     task = asyncio.create_task(run_scheduler())
     yield
