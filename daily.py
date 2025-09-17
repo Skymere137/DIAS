@@ -9,35 +9,52 @@ from contextlib import asynccontextmanager
 
 api = AsyncApiCaller()
 
-# async def main():
+async def main():
     
-#     # print("Hello World!")
-#     # await api.get_watchlist_data(api.small_cap_tickers)
-#     # await api.get_watchlist_data(api.mid_cap_tickers)
-#     get_dataframes()
+    # await acquire_all_small_cap()
+    get_dataframes()
 
-#     print("Goodbye World!")
+async def acquire_all_small_cap():
+    api = AsyncApiCaller()
+    for ticker in api.small_cap_tickers:
+        for func in api.data_acquiration_arr:
+            await api.get_one_week(func, "s", ticker)
 
+async def acquire_all_mid_cap():
+    api = AsyncApiCaller()
+    for ticker in api.mid_cap_tickers:
+        for func in api.data_acquiration_arr:
+            await api.get_one_week(func, "m", ticker)
+
+# async def acquire_all_large_cap():
+#     api = AsyncApiCaller()
+#     for ticker in api.large_cap_tickers:
+#         for func in api.data_acquiration_arr:
+#             await api.get_one_week(func, "l", ticker)
+
+# asyncio.run(get_my_data())
 def get_dataframes():
     global small_cap_data
     small_cap_data = Data("small")
     global mid_cap_data
     mid_cap_data = Data("mid")
+    global one_hr_small
+    one_hr_small = Data("small", "1hr")
+    global five_min_small
+    five_min_small = Data("small", "5min")
+    global one_min_small
+    one_min_small = Data("small", "1min")
 
 def async_scheduler(task):
     asyncio.create_task(task)
 
 def schedulers():
     try:
-        schedule.every().day.at("05:00").do(lambda: async_scheduler(api.get_watchlist_data(api.small_cap_tickers)))
+        schedule.every().day.at("04:00").do(lambda: async_scheduler(acquire_all_small_cap()))
     except Exception as e:
         print(e)
     try:
-        schedule.every().day.at("05:15").do(lambda: async_scheduler(api.get_watchlist_data(api.mid_cap_tickers)))
-    except Exception as e:
-        print(e)
-    try:
-        schedule.every().day.at("05:30").do(lambda: get_dataframes())
+        schedule.every().day.at("05:00").do(lambda: get_dataframes())
     except Exception as e:
         print(e)
     
@@ -61,13 +78,26 @@ async def lifespan(app: FastAPI):
     except asyncio.CancelledError:
         print("Scheduler stopped.")
 
-
 app = FastAPI(lifespan=lifespan)
-
 
 @app.get("/")
 async def root():
     return {"message": "Hello, FastAPI!"}
+
+@app.get("/1hrUptrendS")
+async def uptrending():
+    uptrends = one_hr_small.find_green_crossovers()
+    return one_hr_small.json_safe(uptrends)
+
+@app.get("/5minUptrendS")
+async def uptrending():
+    uptrends = five_min_small.find_green_crossovers()
+    return five_min_small.json_safe(uptrends)
+
+@app.get("/1minUptrendS")
+async def uptrending():
+    uptrends = one_min_small.find_green_crossovers()
+    return one_min_small.json_safe(uptrends)
 
 @app.get("/s_new_highs")
 async def new_highs_json():
@@ -78,6 +108,11 @@ async def new_highs_json():
 async def new_lows_json():
     new_lows = small_cap_data.find_new_lows()
     return small_cap_data.json_safe(new_lows)
+
+@app.get("/s_green_crossover")
+async def green_crossover_json():
+    crossovers = small_cap_data.find_green_crossovers()
+    return small_cap_data.json_safe(crossovers)
 
 @app.get("/m_new_highs")
 async def new_highs_json():
