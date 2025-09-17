@@ -210,10 +210,10 @@ class AsyncApiCaller():
         one_year_ago = int(datetime.now().timestamp()) - (86400 * 365)
         return await tf(symbol, trgt_dir, one_year_ago, today)
     
-    async def more_than_one_year(self, tf, trgt_dir, symbol, year_num=1):
+    async def more_than_one_year(self, tf, trgt_dir, symbol, year_num=2):
         today = int(datetime.now().timestamp())
         num_of_years = year_num * 365
-        years_ago = int(datetime.now().timestamp()) - (86400 * year_num)
+        years_ago = int(datetime.now().timestamp()) - (86400 * num_of_years)
         return await tf(symbol, trgt_dir, years_ago, today)
     
     async def get_watchlist_data(self, watchlist):
