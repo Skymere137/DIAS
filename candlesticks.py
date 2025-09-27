@@ -52,7 +52,7 @@ class Data():
             "get_avg": self.get_avg
         }
         self.dataframes = self.multiprocess_dataframes(self.data_path)
-    
+        
     def multiprocess_dataframes(self, file):
         print("Creating Dataframes!!!")
         manager = multiprocessing.Manager()
@@ -61,6 +61,7 @@ class Data():
         my_lists = self.splitup(os.listdir(file), 8)
         
         for idx, tickers in enumerate(my_lists):
+            print(tickers)
             tickers = multiprocessing.Process(
                 target=self.create_all_dataframes, 
                 args=[tickers, self.data_path, return_dict, idx])
@@ -105,6 +106,18 @@ class Data():
                                 print(small_averages["mvAvg9"][-5], large_averages["mvAvg40"][-5])
         return tickers
     
+    def find_roc_opportunities(self):
+        print("Searching")
+        tickers = []
+        for name, df in self.dataframes.items():
+            if len(df) < 6:
+                continue
+            if self.filter(df.iloc[-1], ["RoC", ">", 1]):
+                tickers.append(name)
+
+            print(name, df["RoC"])
+        return tickers
+            
     def find_new_highs(self):
         tickers = []
         for name, df in self.dataframes.items():
@@ -281,6 +294,26 @@ class Data():
         ):
             return True
 
+    def filter(self, row, params):
+        self.dataframes
+        if not isinstance(params, list):
+            raise TypeError("Non list type found in parameter")  
+        ops = {
+            "==": operator.eq,
+            "!=": operator.ne,
+            ">": operator.gt,
+            "<": operator.lt,
+            ">=": operator.ge,
+            "<=": operator.le
+        }
+        if params[1] not in ops:
+            raise ValueError("Incorrect operand type in method parameters")
+        else:
+            func = ops[params[1]]
+            params[0] = row[params[0]]
+            if func(params[0], params[2]):
+                return params[0]
+        return None
 
-data = Data("small", "1hr")
+data = Data("small", "5min")
 print(data.dataframes)

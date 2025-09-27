@@ -26,27 +26,24 @@ class EstablishDataframe:
         self.large_window = pd.Timedelta(days=large_day_window)
         self.rvol_window = pd.Timedelta(days=rvol_window)
 
-        for index in self.data.index:
-            self.data["mvAvg9"] = self.data["close"].rolling(window=nine_day_window).mean()
-            self.data["mvAvg40"] = self.data["close"].rolling(window=large_day_window).mean()
 
-            self.data["EMA"] = self.data["close"].ewm(span=nine_day_window, adjust=False).mean()
-            self.data["EMA36"] = self.data["close"].ewm(span=large_day_window, adjust=False).mean()
-            if self.queue.values:
-                self.data.at[index, "RoC"] = self.calculate_roc(self.data.loc[index, "mvAvg9"], self.queue.values[-1]["mvAvg9"])
-            else:
-                self.data.at[index, "RoC"] = 0
+        self.data["mvAvg9"] = self.data["close"].rolling(window=nine_day_window).mean()
+        self.data["mvAvg40"] = self.data["close"].rolling(window=large_day_window).mean()
 
-            rvol_start = index - self.rvol_window
-            rvol_data = self.data.loc[rvol_start:index, "volume"]
-            avg_vol = rvol_data.mean()
-            self.data.at[index, "rVol"] = self.calculate_rvol(self.data.loc[index, "volume"], avg_vol)
+        self.data["mvAvg9_prev"] = self.data["mvAvg9"].shift(1)
+        
+
+        self.data["avg_vol"] = self.data["volume"].rolling(window=self.rvol_window).mean()
+        self.data["rVol"] = self.data["volume"] / self.data["avg_vol"]
+        
+        self.data["x_day_high"] = None
+        self.data["pattern"] = None
+        
+        for index, row in self.data.iterrows():
             if self.queue.values:
                 self.data.at[index, "x_day_high"] = self.queue.max_value("high", 4)
-            self.data.at[index, "pattern"] = None
-            self.queue.enqueue(self.data.loc[index])
-        self.final_days = self.data.iloc[-20:-1]
-
+            self.queue.enqueue(row)
+            
     def data_margin(self, dataframe):
         date_ranges = [
                 ("2021-01-04", datetime.strftime(datetime.now(), "%Y-%m-%d")),
@@ -64,24 +61,7 @@ class EstablishDataframe:
         print("❌ No valid date range found. Returning original dataframe.")
         return dataframe
             
-    def filter(self, params):
-        if not isinstance(params, list):
-            raise TypeError("Non list type found in parameter")  
-        ops = {
-            "==": operator.eq,
-            "!=": operator.ne,
-            ">": operator.gt,
-            "<": operator.lt,
-            ">=": operator.ge,
-            "<=": operator.le
-        }
-        if params[1] not in ops:
-            raise ValueError("Incorrect operand type in method parameters")
-        else:
-            func = ops[params[1]]
-            if func(params[0], params[2]):
-                return params[0]
-        return None
+
 
     def calculate_roc(self, current_value, prev_value):
         
