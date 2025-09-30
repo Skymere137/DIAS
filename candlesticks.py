@@ -7,7 +7,7 @@ import operator
 import os
 from custom_queue import Queue
 import multiprocessing
-from DataFrames import EstablishDataframe, IntradayDataframe 
+from DataFrames import EstablishDataframe
 
 
 class Data():
@@ -61,7 +61,6 @@ class Data():
         my_lists = self.splitup(os.listdir(file), 8)
         
         for idx, tickers in enumerate(my_lists):
-            print(tickers)
             tickers = multiprocessing.Process(
                 target=self.create_all_dataframes, 
                 args=[tickers, self.data_path, return_dict, idx])
@@ -77,14 +76,10 @@ class Data():
         return final_result
     
     def create_all_dataframes(self, tickers, base_path, return_dict, idx):
-        if self.intraday is True:
-            frame = IntradayDataframe
-        else:
-            frame = EstablishDataframe
         result = {}
         for ticker in tickers:
             full_path = os.path.join(base_path, ticker)
-            df = frame(full_path)
+            df = EstablishDataframe(full_path)
             result[ticker[:-5]] = df.data
         return_dict[idx] = result
 
@@ -314,6 +309,3 @@ class Data():
             if func(params[0], params[2]):
                 return params[0]
         return None
-
-data = Data("small", "5min")
-print(data.dataframes)
