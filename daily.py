@@ -1,3 +1,4 @@
+import requests
 from datetime import datetime
 import schedule
 from candlesticks import Data
@@ -7,6 +8,7 @@ import asyncio
 from fastapi import FastAPI
 from contextlib import asynccontextmanager
 
+# Data acquiration
 api = AsyncApiCaller()
 
 async def main():
@@ -45,6 +47,12 @@ def get_dataframes():
     global one_min_small
     one_min_small = Data("small", "1min")
 
+# Post Requests
+# def send_data():
+#     url = r"http//:127.0.0.1:8001/receive/jsonData"
+#     with open()
+# Schedules
+
 def async_scheduler(task):
     asyncio.create_task(task)
 
@@ -64,6 +72,8 @@ async def run_scheduler():
         schedule.run_pending()
         await asyncio.sleep(1)
 
+
+# API
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     print("Starting app and scheduler...")
@@ -86,17 +96,17 @@ async def root():
 
 @app.get("/1hrUptrendS")
 async def uptrending():
-    uptrends = one_hr_small.find_green_crossovers()
+    uptrends = one_hr_small.uptrends()
     return one_hr_small.json_safe(uptrends)
 
 @app.get("/5minUptrendS")
 async def uptrending():
-    uptrends = five_min_small.find_green_crossovers()
+    uptrends = five_min_small.uptrends()
     return five_min_small.json_safe(uptrends)
 
 @app.get("/1minUptrendS")
 async def uptrending():
-    uptrends = one_min_small.find_green_crossovers()
+    uptrends = one_min_small.uptrends()
     return one_min_small.json_safe(uptrends)
 
 @app.get("/s_new_highs")
@@ -111,7 +121,7 @@ async def new_lows_json():
 
 @app.get("/s_green_crossover")
 async def green_crossover_json():
-    crossovers = small_cap_data.find_green_crossovers()
+    crossovers = small_cap_data.uptrends()
     return small_cap_data.json_safe(crossovers)
 
 @app.get("/m_new_highs")
@@ -123,3 +133,4 @@ async def new_highs_json():
 async def new_lows_json():
     new_lows = mid_cap_data.find_new_lows()
     return mid_cap_data.json_safe(new_lows)
+

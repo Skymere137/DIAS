@@ -78,29 +78,36 @@ class Data():
     def create_all_dataframes(self, tickers, base_path, return_dict, idx):
         result = {}
         for ticker in tickers:
+            print(ticker)
             full_path = os.path.join(base_path, ticker)
             df = EstablishDataframe(full_path)
             result[ticker[:-5]] = df.data
         return_dict[idx] = result
 
-    def find_green_crossovers(self):
+    def uptrends(self):
         tickers = []
         for name, df in self.dataframes.items():
-            if len(df) < 36:
+            try:
+                averages = df.iloc[-12:]["sma9"]
+                prev_value = 0
+                try:
+                    for val in averages[1:]:
+                        if val < prev_value:
+                            raise ValueError(f"{name}: Value is not high enough")
+                        prev_value = val
+
+                    tickers.append({name: df.iloc[-1].to_dict()})
+                    print(tickers[-1])
+                    print(averages)
+
+                except (IndexError, ValueError) as e:
+                    # Skip this ticker if data is insufficient or value check fails
+                    print(f"Skipping {name}: {e}")
+                    continue
+            except:
                 continue
-            small_averages = df.iloc[-12:-1]
-            large_averages = df.iloc[-12:-1]
-            
-            if small_averages["mvAvg9"][-5] < large_averages["mvAvg40"][-5]:
-                if small_averages["mvAvg9"][-4] > small_averages["mvAvg9"][-5] and large_averages["mvAvg40"][-4] < large_averages["mvAvg40"][-5]:
-                    if small_averages["mvAvg9"][-3] > small_averages["mvAvg9"][-4] and large_averages["mvAvg40"][-3] < large_averages["mvAvg40"][-4]:
-                        if small_averages["mvAvg9"][-2] > small_averages["mvAvg9"][-3] and large_averages["mvAvg40"][-2] < large_averages["mvAvg40"][-3]:
-                            if small_averages["mvAvg9"][-1] > small_averages["mvAvg9"][-2] and large_averages["mvAvg40"][-1] < large_averages["mvAvg40"][-2]:
-                                tickers.append({name: df.iloc[-1].to_dict()})
-                                print(name)
-                                print(small_averages["mvAvg9"][-5], large_averages["mvAvg40"][-5])
         return tickers
-    
+
     def find_roc_opportunities(self):
         print("Searching")
         tickers = []
