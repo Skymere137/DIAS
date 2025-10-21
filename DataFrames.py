@@ -39,16 +39,21 @@ class EstablishDataframe:
             self.data["sma40"] = self.data["close"].rolling(window=40).mean()
         except Exception as e:
             print(e)
-        avg_vol = self.data["volume"].mean()
+
         try:
-            self.data["volVar"] = (self.data["volume"] - avg_vol) ** 2
+            self.data["avgVol"] = self.data["volume"].rolling(window=50).mean()
         except Exception as e:
             print(e)
         try:
             self.data["priceVar"] = [(self.data.loc[ei, "close"] - self.data.loc[ei, "sma40"]) ** 2 for ei in self.data.index]
         except Exception as e:
             print(e)
+        try:
+            self.data["chg%"] = (((self.data["close"] - self.data["open"]).abs()) / self.data["open"]) * 100
+        except Exception as e:
+            print(e)
 
+    
     def data_margin(self, dataframe):
         date_ranges = [
                 ("2021-01-04", datetime.strftime(datetime.now(), "%Y-%m-%d")),
@@ -66,21 +71,3 @@ class EstablishDataframe:
         print("❌ No valid date range found. Returning original dataframe.")
         return dataframe
             
-    def filter(self, params):
-        if not isinstance(params, list):
-            raise TypeError("Non list type found in parameter")    
-        ops = {
-            "==": operator.eq,
-            "!=": operator.ne,
-            ">": operator.gt,
-            "<": operator.lt,
-            ">=": operator.ge,
-            "<=": operator.le
-        }
-        if params[1] not in ops:
-            raise ValueError("Incorrect operand type in method parameters")
-        else:
-            func = ops[params[1]]
-            if func(params[0], params[2]):
-                return params[0]
-        return None

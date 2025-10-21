@@ -84,6 +84,14 @@ class Data():
             result[ticker[:-5]] = df.data
         return_dict[idx] = result
 
+    def return_all(self):
+        tickers = []
+        for name, df in self.dataframes.items():
+            try:
+                tickers.append({name: df.iloc[-1].to_dict()})
+            except (IndexError, ValueError) as e:
+                continue
+        return tickers
     def uptrends(self):
         tickers = []
         for name, df in self.dataframes.items():
@@ -316,3 +324,59 @@ class Data():
             if func(params[0], params[2]):
                 return params[0]
         return None
+
+
+    def filter(self, params):
+        print(params, flush=True)
+        ops = {
+            "==": operator.eq,
+            "!=": operator.ne,
+            ">": operator.gt,
+            "<": operator.lt,
+            ">=": operator.ge,
+            "<=": operator.le
+        }
+        def comparisson(func, value, target):
+            try:
+                if func(value, target):
+                    print(value, func, target)
+                    
+                    return 1
+                return 0
+            except Exception as e:
+                print(e)
+        
+        tickers_to_remove = []
+        counter = 0
+        for name, df in self.dataframes.items():
+            print(name, len(df))
+            try:
+                for x in params:
+                    func = ops[x[1]]
+                    value = df[x[0]].iloc[-1]
+                    target = x[2]
+
+                    # print(value, target)
+                    binary = comparisson(func, value, target)
+                    df.index[-1]
+                    if binary is 1:
+                        continue
+                    else:
+                        
+                        tickers_to_remove.append(name)
+
+            except Exception as e:
+                # print(f"{params}" + " Params are not met")
+                
+                print(e)
+        for ticker in tickers_to_remove:
+            if ticker in self.dataframes:
+                del self.dataframes[ticker]
+        return self
+
+# with open("strats.json", "r") as file:
+#     strategies = json.load(file)
+#     strat = strategies["Uptrending"]
+# data = Data("small", "5min")
+# data = data.filter(strat)
+# print(type(data))
