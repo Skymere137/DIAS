@@ -6,14 +6,32 @@ import json
 from data import AsyncApiCaller
 import asyncio
 from fastapi import FastAPI
+from pydantic import BaseModel
 from contextlib import asynccontextmanager
 
 # Data acquiration
 api = AsyncApiCaller()
 
+with open("strats.json", "r") as file:
+    strategies = json.load(file)
+    
+
+# VERY IMPORTANT!!!
+global_model = {
+    "strat": "Default",
+    "cap": "small",
+    "tf": "one_hr"
+}
+
+class Model(BaseModel):
+    strat: str
+    cap: str
+    tf: str
+    
 async def main():
     
     # await acquire_all_small_cap()
+    # await acquire_all_mid_cap()
     get_dataframes()
 
 async def acquire_all_small_cap():
@@ -34,23 +52,33 @@ async def acquire_all_mid_cap():
 #         for func in api.data_acquiration_arr:
 #             await api.get_one_week(func, "l", ticker)
 
-# asyncio.run(get_my_data())
 def get_dataframes():
-    global small_cap_data
-    small_cap_data = Data("small")
-    global mid_cap_data
-    mid_cap_data = Data("mid")
+    global daily_small
+    daily_small = Data("small", "daily")
     global one_hr_small
     one_hr_small = Data("small", "1hr")
     global five_min_small
     five_min_small = Data("small", "5min")
     global one_min_small
     one_min_small = Data("small", "1min")
+    global mid_cap_data
+    mid_cap_data = Data("mid", "daily")
+    global one_hr_mid
+    one_hr_mid = Data("mid", "1hr")
+    global five_min_mid
+    five_min_mid = Data("mid", "5min")
+    global one_min_mid
+    one_min_mid = Data("mid", "1min")
 
-# Post Requests
-# def send_data():
-#     url = r"http//:127.0.0.1:8001/receive/jsonData"
-#     with open()
+    global global_data
+    global_data = {
+        "daily_small": daily_small,
+        "one_hr_small": one_hr_small,
+        "five_min_small": five_min_small,
+        "one_min_small": one_min_small
+        # "mid": mid_cap_data
+}
+
 # Schedules
 
 def async_scheduler(task):
@@ -76,6 +104,7 @@ async def run_scheduler():
 # API
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+
     print("Starting app and scheduler...")
     await main()
 
@@ -90,47 +119,39 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(lifespan=lifespan)
 
+@app.post("/changeStrategy")
+async def change_strategy(model: Model):
+    global_model["strat"] = model.strat
+    global_model["cap"] = model.cap
+    global_model["tf"] = model.tf
+    return global_model
+
+
 @app.get("/")
-async def root():
-    return {"message": "Hello, FastAPI!"}
+async def get_global_model():
+    return global_model
 
-@app.get("/1hrUptrendS")
+@app.get("/screener")
+async def screener():
+    string = f"{global_model['tf']}_{global_model['cap']}"
+    print(string)
+    data = global_data[string]
+    print(data)
+    strat = global_model["strat"]
+    strat = strategies[strat]
+    filtered = data.filter(strat)
+    return_all = filtered.return_all()
+    return filtered.json_safe(return_all)
+
+@app.get("/smallUptrends")
 async def uptrending():
-    uptrends = one_hr_small.uptrends()
-    return one_hr_small.json_safe(uptrends)
-
-@app.get("/5minUptrendS")
-async def uptrending():
-    uptrends = five_min_small.uptrends()
-    return five_min_small.json_safe(uptrends)
-
-@app.get("/1minUptrendS")
-async def uptrending():
-    uptrends = one_min_small.uptrends()
-    return one_min_small.json_safe(uptrends)
-
-@app.get("/s_new_highs")
-async def new_highs_json():
-    new_highs = small_cap_data.find_new_highs()
-    return small_cap_data.json_safe(new_highs)
-
-@app.get("/s_new_lows")
-async def new_lows_json():
-    new_lows = small_cap_data.find_new_lows()
-    return small_cap_data.json_safe(new_lows)
-
-@app.get("/s_green_crossover")
-async def green_crossover_json():
-    crossovers = small_cap_data.uptrends()
-    return small_cap_data.json_safe(crossovers)
-
-@app.get("/m_new_highs")
-async def new_highs_json():
-    new_highs = mid_cap_data.find_new_highs()
-    return mid_cap_data.json_safe(new_highs)
-
-@app.get("/m_new_lows")
-async def new_lows_json():
-    new_lows = mid_cap_data.find_new_lows()
-    return mid_cap_data.json_safe(new_lows)
+    string = f"{global_model['tf']}_{global_model['cap']}"
+    print(string)
+    data = global_data[string]
+    print(data)
+    strat = global_model["strat"]
+    filtered = data.filter(strat)
+    uptrends = filtered.uptrends()
+    print(uptrends)
+    return filtered.json_safe(uptrends)
 
